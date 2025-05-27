@@ -19,8 +19,12 @@ const client = new OpenAI({
   defaultHeaders: {
     "HTTP-Referer": "https://ventapp.vercel.app",
     "X-Title": "一起吐槽吧"
-  }
+  },
+  timeout: 10000, // 10 seconds timeout
+  fetch: fetch
 });
+
+export const runtime = 'edge';
 
 export async function POST(request: Request) {
   const systemPrompts = {
@@ -56,6 +60,17 @@ export async function POST(request: Request) {
     // 添加更详细的错误信息
     const errorMessage = error instanceof Error ? error.message : '未知错误';
     console.error('Error details:', errorMessage);
+    
+    // 检查是否是连接错误
+    if (error instanceof Error && 
+        (error.message.includes('timeout') || 
+         error.message.includes('network') ||
+         error.message.includes('connection'))) {
+      return NextResponse.json(
+        { error: '网络连接不太顺畅，请稍后再试~' },
+        { status: 503 }
+      );
+    }
     
     return NextResponse.json(
       { error: '抱歉，我现在有点累，晚点再聊？', details: errorMessage },

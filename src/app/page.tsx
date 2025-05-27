@@ -53,7 +53,9 @@ export default function Home() {
       const data = await res.json();
       
       if (!res.ok) {
-        throw new Error(data.details || data.error || '服务器错误');
+        const error = data.error || '服务器错误';
+        const details = data.details ? `(${data.details})` : '';
+        throw new Error(`${error}${details}`);
       }
       
       if (!data.response) {
@@ -71,7 +73,17 @@ export default function Home() {
       setComplaint('');
     } catch (error) {
       console.error('Error:', error);
-      setResponse(error instanceof Error ? error.message : '抱歉，出了点小问题，请稍后再试~');
+      let errorMessage = '抱歉，出了点小问题，请稍后再试~';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('网络') || error.message.includes('network') || error.message.includes('connection')) {
+          errorMessage = '网络连接不太顺畅，请稍后再试~';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setResponse(errorMessage);
     } finally {
       setIsLoading(false);
     }
