@@ -39,6 +39,8 @@ export default function Home() {
     if (!complaint.trim()) return;
     
     setIsLoading(true);
+    setResponse('');
+    
     try {
       const res = await fetch('/api/complain', {
         method: 'POST',
@@ -49,6 +51,15 @@ export default function Home() {
       });
       
       const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.details || data.error || '服务器错误');
+      }
+      
+      if (!data.response) {
+        throw new Error('未收到有效回复');
+      }
+      
       setResponse(data.response);
       
       // Save to localStorage
@@ -60,7 +71,7 @@ export default function Home() {
       setComplaint('');
     } catch (error) {
       console.error('Error:', error);
-      setResponse(translations[language].errorMessage);
+      setResponse(error instanceof Error ? error.message : '抱歉，出了点小问题，请稍后再试~');
     } finally {
       setIsLoading(false);
     }

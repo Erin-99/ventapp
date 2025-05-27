@@ -21,6 +21,7 @@ export async function POST(request: Request) {
   };
   try {
     const { complaint, language = 'zh' } = await request.json();
+    console.log('Received request:', { complaint, language });
 
     const completion = await client.chat.completions.create({
       model: "deepseek/deepseek-chat",
@@ -36,13 +37,20 @@ export async function POST(request: Request) {
       ]
     });
 
-    return NextResponse.json({
-      response: completion.choices[0].message.content
-    });
+    console.log('API Response:', completion.choices[0].message);
+    
+    const response = completion.choices[0].message.content;
+    console.log('Sending response:', response);
+
+    return NextResponse.json({ response });
   } catch (error) {
     console.error('API Error:', error);
+    // 添加更详细的错误信息
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    console.error('Error details:', errorMessage);
+    
     return NextResponse.json(
-      { error: '抱歉，我现在有点累，晚点再聊？' },
+      { error: '抱歉，我现在有点累，晚点再聊？', details: errorMessage },
       { status: 500 }
     );
   }
