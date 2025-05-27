@@ -1,60 +1,62 @@
 import { NextResponse } from 'next/server';
-import OpenAI from 'openai';
 
-// 检查环境变量
-console.log('Environment check:', {
-  hasApiKey: !!process.env.OPENROUTER_API_KEY,
-  nodeEnv: process.env.NODE_ENV,
-  vercelEnv: process.env.VERCEL_ENV
-});
+export const runtime = 'edge';
 
 if (!process.env.OPENROUTER_API_KEY) {
   console.error('API key is missing!');
   throw new Error('Missing OPENROUTER_API_KEY environment variable');
 }
 
-const client = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://ventapp.vercel.app",
-    "X-Title": "一起吐槽吧"
-  },
-  timeout: 10000, // 10 seconds timeout
-  fetch: fetch
-});
-
-export const runtime = 'edge';
+const systemPrompts = {
+  zh: "你是一个善解人意的朋友，会用幽默、温暖的方式回应别人的吐槽。回复要简短，像朋友之间的对话一样自然。",
+  en: "You are an empathetic friend who responds to people's venting with humor and warmth. Keep responses short and natural, like a casual conversation between friends."
+};
 
 export async function POST(request: Request) {
-  const systemPrompts = {
-    zh: "你是一个善解人意的朋友，会用幽默、温暖的方式回应别人的吐槽。回复要简短，像朋友之间的对话一样自然。",
-    en: "You are an empathetic friend who responds to people's venting with humor and warmth. Keep responses short and natural, like a casual conversation between friends."
-  };
   try {
     const { complaint, language = 'zh' } = await request.json();
     console.log('Received request:', { complaint, language });
 
-    const completion = await client.chat.completions.create({
-      model: "deepseek/deepseek-chat",
-      messages: [
-        {
-          role: "system",
-          content: systemPrompts[language as keyof typeof systemPrompts]
-        },
-        {
-          role: "user",
-          content: complaint
-        }
-      ]
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://ventapp.vercel.app',
+        'X-Title': '一起吐槽吧'
+      },
+      body: JSON.stringify({
+        model: 'deepseek/deepseek-chat',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompts[language as keyof typeof systemPrompts]
+          },
+          {
+            role: 'user',
+            content: complaint
+          }
+        ]
+      })
     });
 
-    console.log('API Response:', completion.choices[0].message);
-    
-    const response = completion.choices[0].message.content;
-    console.log('Sending response:', response);
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('API Error Response:', errorData);
+      throw new Error(errorData.error?.message || 'API request failed');
+    }
 
-    return NextResponse.json({ response });
+    const data = await response.json();
+    console.log('API Response:', data);
+
+    if (!data.choices?.[0]?.message?.content) {
+      throw new Error('Invalid API response format');
+    }
+
+    const aiResponse = data.choices[0].message.content;
+    console.log('Sending response:', aiResponse);
+
+    return NextResponse.json({ response: aiResponse });
   } catch (error) {
     console.error('API Error:', error);
     // 添加更详细的错误信息
