@@ -35,41 +35,65 @@ export default function Home() {
     }
   }, []);
 
-  const handleSubmit = async () => {
+  const systemPrompts = {
+    zh: "你是一个善解人意的朋友，会用幽默、温暖的方式回应别人的吐槽。回复要简短，像朋友之间的对话一样自然。",
+    en: "You are an empathetic friend who responds to people's venting with humor and warmth. Keep responses short and natural, like a casual conversation between friends."
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!complaint.trim()) return;
-    
+
     setIsLoading(true);
     setResponse('');
-    
+
     try {
-      const res = await fetch('/api/complain', {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_OPENROUTER_API_KEY}`,
+          'HTTP-Referer': 'https://ventapp.vercel.app',
+          'X-Title': '一起吐槽吧'
         },
-        body: JSON.stringify({ complaint, language }),
+        body: JSON.stringify({
+          model: 'deepseek/deepseek-chat',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompts[language]
+            },
+            {
+              role: 'user',
+              content: complaint
+            }
+          ]
+        })
       });
-      
+
+      clearTimeout(timeoutId);
+
       const data = await res.json();
       
       if (!res.ok) {
-        const error = data.error || '服务器错误';
-        const details = data.details ? `(${data.details})` : '';
-        throw new Error(`${error}${details}`);
+        const error = data.error?.message || '服务器错误';
+        throw new Error(error);
       }
       
-      if (!data.response) {
-        throw new Error('未收到有效回复');
+      if (!data.choices?.[0]?.message?.content) {
+        throw new Error('响应为空');
       }
-      
-      setResponse(data.response);
-      
+
+      setResponse(data.choices[0].message.content);
+      setComplaint('');
       // Save to localStorage
       const history = JSON.parse(localStorage.getItem('complaints') || '[]');
-      history.unshift({ complaint, response: data.response, timestamp: new Date().toISOString() });
+      history.unshift({ complaint, response: data.choices[0].message.content, timestamp: new Date().toISOString() });
       localStorage.setItem('complaints', JSON.stringify(history.slice(0, 50))); // Keep last 50 complaints
-      
-      // Clear the complaint input
       setComplaint('');
     } catch (error) {
       console.error('Error:', error);
