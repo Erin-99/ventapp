@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
-export const runtime = 'edge';
+// 使用 Node.js runtime
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
@@ -43,9 +44,12 @@ async function makeRequest(url: string, options: RequestInit, retries = 3): Prom
   const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
   for (let i = 0; i < retries; i++) {
     try {
+      const agent = process.env.https_proxy ? new HttpsProxyAgent(process.env.https_proxy) : undefined;
+      
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal
+        signal: controller.signal,
+        agent
       });
       clearTimeout(timeoutId);
       return response;
