@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { translations, type Language } from '../i18n/translations';
 
 // Get user's preferred language from browser

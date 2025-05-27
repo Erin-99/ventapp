@@ -12,12 +12,29 @@ const systemPrompts = {
   en: "You are an empathetic friend who responds to people's venting with humor and warmth. Keep responses short and natural, like a casual conversation between friends."
 };
 
+async function makeRequest(url: string, options: RequestInit, retries = 3): Promise<Response> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: AbortSignal.timeout(8000) // 8 second timeout
+      });
+      return response;
+    } catch (error) {
+      console.error(`Attempt ${i + 1} failed:`, error);
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // exponential backoff
+    }
+  }
+  throw new Error('All retries failed');
+}
+
 export async function POST(request: Request) {
   try {
     const { complaint, language = 'zh' } = await request.json();
     console.log('Received request:', { complaint, language });
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await makeRequest('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -59,23 +76,42 @@ export async function POST(request: Request) {
     return NextResponse.json({ response: aiResponse });
   } catch (error) {
     console.error('API Error:', error);
-    // 添加更详细的错误信息
     const errorMessage = error instanceof Error ? error.message : '未知错误';
     console.error('Error details:', errorMessage);
     
-    // 检查是否是连接错误
-    if (error instanceof Error && 
-        (error.message.includes('timeout') || 
-         error.message.includes('network') ||
-         error.message.includes('connection'))) {
-      return NextResponse.json(
-        { error: '网络连接不太顺畅，请稍后再试~' },
-        { status: 503 }
-      );
+    // 检查各种错误类型
+    if (error instanceof Error) {
+      // 连接超时
+      if (error.name === 'TimeoutError' || errorMessage.includes('timeout')) {
+        return NextResponse.json(
+          { error: '请求超时，请稍后再试~' },
+          { status: 504 }
+        );
+      }
+      
+      // 网络错误
+      if (error.name === 'TypeError' || 
+          errorMessage.includes('network') || 
+          errorMessage.includes('connection') ||
+          errorMessage.includes('failed to fetch')) {
+        return NextResponse.json(
+          { error: '网络连接不太顺畅，请稍后再试~' },
+          { status: 503 }
+        );
+      }
+
+      // API 错误
+      if (errorMessage.includes('API')) {
+        return NextResponse.json(
+          { error: 'API 服务暂时不可用，请稍后再试~' },
+          { status: 502 }
+        );
+      }
     }
     
+    // 其他未知错误
     return NextResponse.json(
-      { error: '抱歉，我现在有点累，晚点再聊？', details: errorMessage },
+      { error: '抱歉，出了点小问题，请稍后再试~', details: errorMessage },
       { status: 500 }
     );
   }
