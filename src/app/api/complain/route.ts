@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+// 检查环境变量
+console.log('Environment check:', {
+  hasApiKey: !!process.env.OPENROUTER_API_KEY,
+  nodeEnv: process.env.NODE_ENV,
+  vercelEnv: process.env.VERCEL_ENV
+});
+
 if (!process.env.OPENROUTER_API_KEY) {
+  console.error('API key is missing!');
   throw new Error('Missing OPENROUTER_API_KEY environment variable');
 }
 
