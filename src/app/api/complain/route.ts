@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
+if (!process.env.OPENROUTER_API_KEY) {
+  throw new Error('Missing OPENROUTER_API_KEY environment variable');
+}
+
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
-  apiKey: "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",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://ventapp.vercel.app",
+    "X-Title": "一起吐槽吧"
+  }
 });
 
 export async function POST(request: Request) {
@@ -25,11 +33,7 @@ export async function POST(request: Request) {
           role: "user",
           content: complaint
         }
-      ],
-      headers: {
-        "HTTP-Referer": "https://ventapp.vercel.app",
-        "X-Title": "一起吐槽吧",
-      },
+      ]
     });
 
     return NextResponse.json({
