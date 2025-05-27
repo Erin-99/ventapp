@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
+export const fetchCache = 'force-no-store';
 
 if (!process.env.OPENROUTER_API_KEY) {
   console.error('API key is missing!');
@@ -14,29 +16,38 @@ const systemPrompts = {
 
 // 添加环境变量检查
 function checkEnvironment() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  console.log('Environment check:', {
-    hasApiKey: !!apiKey,
-    apiKeyLength: apiKey?.length,
-    nodeEnv: process.env.NODE_ENV,
-    vercelEnv: process.env.VERCEL_ENV
-  });
-  
-  if (!apiKey) {
-    throw new Error('OPENROUTER_API_KEY is missing');
-  }
-  if (apiKey.length < 30) {
-    throw new Error('OPENROUTER_API_KEY appears to be invalid');
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    console.log('Environment check:', {
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey?.length,
+      nodeEnv: process.env.NODE_ENV,
+      vercelEnv: process.env.VERCEL_ENV,
+      runtime: process.env.NEXT_RUNTIME
+    });
+    
+    if (!apiKey) {
+      throw new Error('OPENROUTER_API_KEY is missing');
+    }
+    if (apiKey.length < 30) {
+      throw new Error('OPENROUTER_API_KEY appears to be invalid');
+    }
+  } catch (error) {
+    console.error('Environment check failed:', error);
+    throw error;
   }
 }
 
 async function makeRequest(url: string, options: RequestInit, retries = 3): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.timeout(8000) // 8 second timeout
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       return response;
     } catch (error) {
       console.error(`Attempt ${i + 1} failed:`, error);
@@ -48,9 +59,10 @@ async function makeRequest(url: string, options: RequestInit, retries = 3): Prom
 }
 
 export async function POST(request: Request) {
+  // 捕获所有可能的错误
+  try {
   // 检查环境变量
   checkEnvironment();
-  try {
     const { complaint, language = 'zh' } = await request.json();
     console.log('Received request:', { complaint, language, timestamp: new Date().toISOString() });
 
