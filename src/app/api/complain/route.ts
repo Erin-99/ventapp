@@ -12,6 +12,24 @@ const systemPrompts = {
   en: "You are an empathetic friend who responds to people's venting with humor and warmth. Keep responses short and natural, like a casual conversation between friends."
 };
 
+// 添加环境变量检查
+function checkEnvironment() {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  console.log('Environment check:', {
+    hasApiKey: !!apiKey,
+    apiKeyLength: apiKey?.length,
+    nodeEnv: process.env.NODE_ENV,
+    vercelEnv: process.env.VERCEL_ENV
+  });
+  
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is missing');
+  }
+  if (apiKey.length < 30) {
+    throw new Error('OPENROUTER_API_KEY appears to be invalid');
+  }
+}
+
 async function makeRequest(url: string, options: RequestInit, retries = 3): Promise<Response> {
   for (let i = 0; i < retries; i++) {
     try {
@@ -30,9 +48,27 @@ async function makeRequest(url: string, options: RequestInit, retries = 3): Prom
 }
 
 export async function POST(request: Request) {
+  // 检查环境变量
+  checkEnvironment();
   try {
     const { complaint, language = 'zh' } = await request.json();
-    console.log('Received request:', { complaint, language });
+    console.log('Received request:', { complaint, language, timestamp: new Date().toISOString() });
+
+    console.log('Making API request...');
+    const requestBody = {
+      model: 'deepseek/deepseek-chat',
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompts[language as keyof typeof systemPrompts]
+        },
+        {
+          role: 'user',
+          content: complaint
+        }
+      ]
+    };
+    console.log('Request body:', requestBody);
 
     const response = await makeRequest('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
@@ -42,19 +78,7 @@ export async function POST(request: Request) {
         'HTTP-Referer': 'https://ventapp.vercel.app',
         'X-Title': '一起吐槽吧'
       },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompts[language as keyof typeof systemPrompts]
-          },
-          {
-            role: 'user',
-            content: complaint
-          }
-        ]
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
